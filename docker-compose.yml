@@ -1,0 +1,152 @@
+version: '3.8'
+
+services:
+
+  # ==================== BANCOS ====================
+
+  postgres-usuarios:
+    image: postgres:15-alpine
+    container_name: postgres-usuarios
+    environment:
+      POSTGRES_DB: CF_usuarios
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5433:5432"
+    networks:
+      - financeiro-network
+
+  postgres-centrocusto:
+    image: postgres:15-alpine
+    container_name: postgres-centrocusto
+    environment:
+      POSTGRES_DB: CF_centrocusto
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5434:5432"
+    networks:
+      - financeiro-network
+
+  postgres-lancamentos:
+    image: postgres:15-alpine
+    container_name: postgres-lancamentos
+    environment:
+      POSTGRES_DB: CF_lancamentos
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5435:5432"
+    networks:
+      - financeiro-network
+
+  # ==================== MICROSSERVIÇOS ====================
+
+  ms-usuarios:
+    build:
+      context: ../ms-usuarios
+    container_name: ms-usuarios
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-usuarios:5432/CF_usuarios
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION: ${JWT_EXPIRATION}
+    depends_on:
+      - postgres-usuarios
+    networks:
+      - financeiro-network
+
+  ms-centro-custo:
+    build:
+      context: ../ms-centro-custo
+    container_name: ms-centro-custo
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-centrocusto:5432/CF_centrocusto
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION: ${JWT_EXPIRATION}
+    depends_on:
+      - postgres-centrocusto
+    networks:
+      - financeiro-network
+
+  ms-lancamentos:
+    build:
+      context: ../ms-lancamentos
+    container_name: ms-lancamentos
+    ports:
+      - "8083:8083"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-lancamentos:5432/CF_lancamentos
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION: ${JWT_EXPIRATION}
+      MS_CENTRO_CUSTO_URL: http://ms-centro-custo:8082
+    depends_on:
+      - postgres-lancamentos
+      - ms-centro-custo
+    networks:
+      - financeiro-network
+
+  ms-fluxo-caixa:
+    build:
+      context: ../ms-fluxo-caixa
+    container_name: ms-fluxo-caixa
+    ports:
+      - "8084:8084"
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION: ${JWT_EXPIRATION}
+      MS_LANCAMENTOS_URL: http://ms-lancamentos:8083
+    depends_on:
+      - ms-lancamentos
+    networks:
+      - financeiro-network
+
+  bff-financeiro:
+    build:
+      context: ../bff-financeiro
+    container_name: bff-financeiro
+    ports:
+      - "8085:8085"
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION: ${JWT_EXPIRATION}
+      MS_LANCAMENTOS_URL: http://ms-lancamentos:8083
+      MS_CENTRO_CUSTO_URL: http://ms-centro-custo:8082
+      MS_FLUXO_CAIXA_URL: http://ms-fluxo-caixa:8084
+    depends_on:
+      - ms-lancamentos
+      - ms-centro-custo
+      - ms-fluxo-caixa
+    networks:
+      - financeiro-network
+
+  api-gateway:
+    build:
+      context: ../ms-api-gateway
+    container_name: api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION: ${JWT_EXPIRATION}
+    depends_on:
+      - ms-usuarios
+      - ms-lancamentos
+      - ms-centro-custo
+      - ms-fluxo-caixa
+      - bff-financeiro
+    networks:
+      - financeiro-network
+
+networks:
+  financeiro-network:
+    driver: bridge
