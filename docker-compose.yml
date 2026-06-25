@@ -38,6 +38,18 @@ services:
     networks:
       - financeiro-network
 
+  postgres-notificacao:
+    image: postgres:15-alpine
+    container_name: postgres-notificacao
+    environment:
+      POSTGRES_DB: CF_notificacao
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5436:5432"
+    networks:
+      - financeiro-network
+
   # ==================== MICROSSERVIÇOS ====================
 
   ms-usuarios:
@@ -84,6 +96,7 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRATION: ${JWT_EXPIRATION}
       MS_CENTRO_CUSTO_URL: http://ms-centro-custo:8082
+      INTERNAL_SECRET: ${INTERNAL_SECRET}
     depends_on:
       - postgres-lancamentos
       - ms-centro-custo
@@ -119,6 +132,30 @@ services:
       - ms-lancamentos
       - ms-centro-custo
       - ms-fluxo-caixa
+    networks:
+      - financeiro-network
+
+  ms-notificacao:
+    build: ../ms-notificacao
+    container_name: ms-notificacao
+    ports:
+      - "8086:8086"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-notificacao:5432/CF_notificacao
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION: ${JWT_EXPIRATION}
+      MS_LANCAMENTOS_URL: http://ms-lancamentos:8083
+      INTERNAL_SECRET: ${INTERNAL_SECRET}
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY}
+      SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL}
+      EVOLUTION_API_URL: ${EVOLUTION_API_URL}
+      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
+      EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE}
+    depends_on:
+      - postgres-notificacao
+      - ms-lancamentos
     networks:
       - financeiro-network
 
